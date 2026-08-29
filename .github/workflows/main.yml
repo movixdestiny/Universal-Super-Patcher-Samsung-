@@ -19,7 +19,7 @@ on:
       GSI:
         description: 'GSI Image Direct Link'
         required: true
-        default: 'https://downloads.sourceforge.net/project/misterztr-gsi/LineageOS/Android%2015/LineageOS-22.2-20260105-GAPPS-EXT4-GSI.7z?ts=gAAAAABqk2HqpwVZ79IOVwl9dgWkjbVoaYAY9vLQsZit9oatQfsc4dyWmjlXWX0hdSQrTymZSyUKgo4GrgVtzrr8ZsVQ6tC66w%3D%3D&r=https%3A%2F%2Fsourceforge.net%2Fprojects%2Fmisterztr-gsi%2Ffiles%2FLineageOS%2FAndroid%252015%2FLineageOS-22.2-20260105-GAPPS-EXT4-GSI.7z%2Fdownload%3Fuse_mirror%3Dsf-eu-introserv-3'
+        default: 'https://github.com/movixdestiny/Universal-Super-Patcher-Samsung-/releases/download/a14/LineageOS-22.2-20260105-GAPPS-EXT4-GSI.7z'
 
       NAME:
         description: 'Rom Name'
