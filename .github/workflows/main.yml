@@ -77,8 +77,17 @@ jobs:
 
         wget -q "https://github.com/movixdestiny/Universal-Super-Patcher-Samsung-/releases/download/a14/system_ext.img" -O system_ext.img
 
-        echo "Downloaded stock partitions:"
-        ls -lh vendor.img odm.img product.img system_ext.img
+        echo "Checking downloaded files..."
+        ls -lh vendor.img
+        ls -lh odm.img
+        ls -lh product.img
+        ls -lh system_ext.img
+
+        echo "Checking file types..."
+        file vendor.img
+        file odm.img
+        file product.img
+        file system_ext.img
 
     - name: Downloading Your GSI And Extracting
       run: |
@@ -86,10 +95,14 @@ jobs:
 
         wget -q "${{ github.event.inputs.GSI }}" -O gsi.7z
 
+        echo "GSI archive:"
+        ls -lh gsi.7z
+
         mkdir -p sys
 
         7z x gsi.7z -osys
 
+        echo "Searching for GSI image..."
         find sys -type f -name "*.img" -print
 
         GSI_IMAGE=$(find sys -type f -name "*.img" | head -n 1)
@@ -104,63 +117,129 @@ jobs:
         echo "GSI extracted successfully:"
         ls -lh system.img
 
+        echo "GSI image type:"
+        file system.img
+
     - name: Packing
       run: |
         cd lpbinary/binary
 
-        if [ -f odm.img ]; then
-          main=$(($(ls -nl odm.img | awk '{print $5}') + 2621440 + $(ls -nl system.img | awk '{print $5}') + $(ls -nl vendor.img | awk '{print $5}')))
+        echo "======================================"
+        echo "Calculating partition sizes"
+        echo "======================================"
+
+        SYSTEM_SIZE=$(stat -c%s system.img)
+        VENDOR_SIZE=$(stat -c%s vendor.img)
+        PRODUCT_SIZE=$(stat -c%s product.img)
+        ODM_SIZE=$(stat -c%s odm.img)
+        SYSTEM_EXT_SIZE=$(stat -c%s system_ext.img)
+
+        echo "system:     $SYSTEM_SIZE"
+        echo "vendor:     $VENDOR_SIZE"
+        echo "product:    $PRODUCT_SIZE"
+        echo "odm:        $ODM_SIZE"
+        echo "system_ext: $SYSTEM_EXT_SIZE"
+
+        SUPER_SIZE=${{ github.event.inputs.SUPER }}
+
+        echo "Physical super size: $SUPER_SIZE"
+
+        echo "======================================"
+        echo "Aligning partition sizes"
+        echo "======================================"
+
+        ALIGN=1048576
+
+        align_up() {
+          SIZE=$1
+          echo $(( (SIZE + ALIGN - 1) / ALIGN * ALIGN ))
+        }
+
+        SYSTEM_ALIGNED=$(align_up "$SYSTEM_SIZE")
+        VENDOR_ALIGNED=$(align_up "$VENDOR_SIZE")
+        PRODUCT_ALIGNED=$(align_up "$PRODUCT_SIZE")
+        ODM_ALIGNED=$(align_up "$ODM_SIZE")
+        SYSTEM_EXT_ALIGNED=$(align_up "$SYSTEM_EXT_SIZE")
+
+        echo "system aligned:     $SYSTEM_ALIGNED"
+        echo "vendor aligned:     $VENDOR_ALIGNED"
+        echo "product aligned:    $PRODUCT_ALIGNED"
+        echo "odm aligned:        $ODM_ALIGNED"
+        echo "system_ext aligned: $SYSTEM_EXT_ALIGNED"
+
+        MAIN_SIZE=$(
+          (
+            SYSTEM_ALIGNED +
+            VENDOR_ALIGNED +
+            PRODUCT_ALIGNED +
+            ODM_ALIGNED +
+            SYSTEM_EXT_ALIGNED +
+            8388608
+          )
+        )
+
+        echo "Calculated main group size: $MAIN_SIZE"
+
+        if [ "$MAIN_SIZE" -ge "$SUPER_SIZE" ]; then
+          echo "ERROR: Calculated main group is larger than physical super."
+          echo "main:  $MAIN_SIZE"
+          echo "super: $SUPER_SIZE"
+          exit 1
         fi
 
-        if [ -f system_ext.img ]; then
-          main=$((2621440 + 2621440 + $(ls -nl system.img | awk '{print $5}') + $(ls -nl vendor.img | awk '{print $5}')))
+        echo "======================================"
+        echo "Building custom super.img"
+        echo "======================================"
+
+        ./lpmake \
+          --metadata-size 65536 \
+          --super-name super \
+          --metadata-slots 2 \
+          --device "super:${SUPER_SIZE}" \
+          --group "main:${MAIN_SIZE}" \
+          --partition "system:readonly:${SYSTEM_ALIGNED}:main" \
+          --image "system=system.img" \
+          --partition "vendor:readonly:${VENDOR_ALIGNED}:main" \
+          --image "vendor=vendor.img" \
+          --partition "product:readonly:${PRODUCT_ALIGNED}:main" \
+          --image "product=product.img" \
+          --partition "odm:readonly:${ODM_ALIGNED}:main" \
+          --image "odm=odm.img" \
+          --partition "system_ext:readonly:${SYSTEM_EXT_ALIGNED}:main" \
+          --image "system_ext=system_ext.img" \
+          --sparse \
+          --output super.img
+
+        echo "======================================"
+        echo "super.img successfully created"
+        echo "======================================"
+
+        ls -lh super.img
+
+        file super.img
+
+    - name: Verify Super Image
+      run: |
+        cd lpbinary/binary
+
+        echo "Checking generated super.img..."
+
+        if [ ! -f super.img ]; then
+          echo "ERROR: super.img was not created."
+          exit 1
         fi
 
-        echo $main > main.txt
+        SIZE=$(stat -c%s super.img)
 
-        if [ -f system_ext.img ]; then
-          ./lpmake \
-            --metadata-size 65536 \
-            --super-name super \
-            --metadata-slots 2 \
-            --device super:${{ github.event.inputs.SUPER }} \
-            --group main:$(<main.txt) \
-            --partition system:readonly:$(ls -nl system.img | awk '{print $5}'):main \
-            --image system=system.img \
-            --partition vendor:readonly:$(ls -nl vendor.img | awk '{print $5}'):main \
-            --image vendor=vendor.img \
-            --partition product:readonly:$(ls -nl product.img | awk '{print $5}'):main \
-            --image product=product.img \
-            --partition system_ext:readonly:$(ls -nl system_ext.img | awk '{print $5}'):main \
-            --image system_ext=system_ext.img \
-            --sparse \
-            --output super.img
+        echo "Generated super.img size:"
+        echo "$SIZE bytes"
+
+        if [ "$SIZE" -gt "${{ github.event.inputs.SUPER }}" ]; then
+          echo "ERROR: Generated super.img is larger than physical super partition."
+          exit 1
         fi
 
-        if [ -f odm.img ]; then
-          ./lpmake \
-            --metadata-size 65536 \
-            --super-name super \
-            --metadata-slots 2 \
-            --device super:${{ github.event.inputs.SUPER }} \
-            --group main:$(<main.txt) \
-            --partition system:readonly:$(ls -nl system.img | awk '{print $5}'):main \
-            --image system=system.img \
-            --partition vendor:readonly:$(ls -nl vendor.img | awk '{print $5}'):main \
-            --image vendor=vendor.img \
-            --partition product:readonly:$(ls -nl product.img | awk '{print $5}'):main \
-            --image product=product.img \
-            --partition odm:readonly:$(ls -nl odm.img | awk '{print $5}'):main \
-            --image odm=odm.img \
-            --sparse \
-            --output super.img
-        fi
-
-        rm system.img
-        rm product.img
-        rm vendor.img
-        rm -f odm.img
-        rm -f system_ext.img
+        echo "Super image is within physical partition size."
 
     - name: Creating tar and compressing to 7z
       run: |
@@ -174,6 +253,9 @@ jobs:
 
         rm -rf super.tar
 
+        echo "Final package:"
+        ls -lh "${{ github.event.inputs.NAME }}"
+
     - name: Upload to Release
       uses: softprops/action-gh-release@v2
       with:
@@ -184,6 +266,9 @@ jobs:
           Device: ${{ github.event.inputs.DEVICE }}
           Version: ${{ github.event.inputs.VERSION }}
           Rom Name: ${{ github.event.inputs.NAME }}
+
+          Physical Super Size:
+          ${{ github.event.inputs.SUPER }}
 
           Flash:
           Extract the 7z file and flash through ODIN in AP Section.
