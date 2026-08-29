@@ -14,7 +14,7 @@ on:
       DEVICE:
         description: 'Enter Your Device Name'
         required: true
-        default: 'Samsung Galaxy A14 4G SM-A145R'
+        default: 'Samsung Galaxy A14'
 
       GSI:
         description: 'GSI Image Direct Link'
@@ -98,14 +98,39 @@ jobs:
       run: |
         cd lpbinary/binary
 
-        wget -q "${{ github.event.inputs.VENDOR }}" -O vendor.img
-        wget -q "${{ github.event.inputs.ODM }}" -O odm.img
-        wget -q "${{ github.event.inputs.PRODUCT }}" -O product.img
-        wget -q "${{ github.event.inputs.SYSTEM_EXT }}" -O system_ext.img
-        wget -q "${{ github.event.inputs.ODM_DLKM }}" -O odm_dlkm.img
-        wget -q "${{ github.event.inputs.SYSTEM_DLKM }}" -O system_dlkm.img
-        wget -q "${{ github.event.inputs.VENDOR_DLKM }}" -O vendor_dlkm.img
+        echo "======================================"
+        echo "Downloading stock partitions"
+        echo "======================================"
 
+        wget -q --show-progress \
+          "${{ github.event.inputs.VENDOR }}" \
+          -O vendor.img
+
+        wget -q --show-progress \
+          "${{ github.event.inputs.ODM }}" \
+          -O odm.img
+
+        wget -q --show-progress \
+          "${{ github.event.inputs.PRODUCT }}" \
+          -O product.img
+
+        wget -q --show-progress \
+          "${{ github.event.inputs.SYSTEM_EXT }}" \
+          -O system_ext.img
+
+        wget -q --show-progress \
+          "${{ github.event.inputs.ODM_DLKM }}" \
+          -O odm_dlkm.img
+
+        wget -q --show-progress \
+          "${{ github.event.inputs.SYSTEM_DLKM }}" \
+          -O system_dlkm.img
+
+        wget -q --show-progress \
+          "${{ github.event.inputs.VENDOR_DLKM }}" \
+          -O vendor_dlkm.img
+
+        echo ""
         echo "Downloaded stock partitions:"
         ls -lh \
           vendor.img \
@@ -120,11 +145,28 @@ jobs:
       run: |
         cd lpbinary/binary
 
-        wget -q "${{ github.event.inputs.GSI }}" -O gsi.7z
+        echo "======================================"
+        echo "Downloading LineageOS GSI"
+        echo "======================================"
+
+        wget -q --show-progress \
+          "${{ github.event.inputs.GSI }}" \
+          -O gsi.7z
+
+        echo ""
+        echo "GSI archive:"
+        ls -lh gsi.7z
+
+        echo "======================================"
+        echo "Extracting GSI archive"
+        echo "======================================"
 
         mkdir -p sys
 
         7z x gsi.7z -osys
+
+        echo ""
+        echo "Searching for system image..."
 
         find sys -type f -name "*.img" -print
 
@@ -137,6 +179,7 @@ jobs:
 
         mv "$GSI_IMAGE" system.img
 
+        echo ""
         echo "GSI extracted successfully:"
         ls -lh system.img
 
@@ -204,11 +247,23 @@ jobs:
         echo "Calculating main group"
         echo "======================================"
 
-        MAIN_SIZE=$((SYSTEM_ALIGNED + VENDOR_ALIGNED + PRODUCT_ALIGNED + ODM_ALIGNED + SYSTEM_EXT_ALIGNED + ODM_DLKM_ALIGNED + SYSTEM_DLKM_ALIGNED + VENDOR_DLKM_ALIGNED + 8388608))
+        MAIN_SIZE=$(( \
+          SYSTEM_ALIGNED + \
+          VENDOR_ALIGNED + \
+          PRODUCT_ALIGNED + \
+          ODM_ALIGNED + \
+          SYSTEM_EXT_ALIGNED + \
+          ODM_DLKM_ALIGNED + \
+          SYSTEM_DLKM_ALIGNED + \
+          VENDOR_DLKM_ALIGNED + \
+          8388608 \
+        ))
 
         echo "main group size: $MAIN_SIZE"
+        echo "physical super:  $SUPER_SIZE"
 
         if [ "$MAIN_SIZE" -ge "$SUPER_SIZE" ]; then
+          echo ""
           echo "ERROR: Partitions do not fit inside physical super."
           echo "Main group: $MAIN_SIZE"
           echo "Super size: $SUPER_SIZE"
@@ -216,7 +271,7 @@ jobs:
         fi
 
         echo "======================================"
-        echo "Building custom super.img"
+        echo "Building custom sparse super.img"
         echo "======================================"
 
         ./lpmake \
@@ -244,6 +299,7 @@ jobs:
           --sparse \
           --output super.img
 
+        echo ""
         echo "======================================"
         echo "super.img created successfully"
         echo "======================================"
@@ -254,6 +310,10 @@ jobs:
     - name: Verify Super Image
       run: |
         cd lpbinary/binary
+
+        echo "======================================"
+        echo "Verifying super.img"
+        echo "======================================"
 
         if [ ! -f super.img ]; then
           echo "ERROR: super.img was not created."
@@ -271,24 +331,47 @@ jobs:
           exit 1
         fi
 
+        echo ""
         echo "Super image size check passed."
 
-    - name: Creating tar and compressing to 7z
+    - name: Creating Odin Package
       run: |
         cd lpbinary/binary
 
-        tar -cvf super.tar super.img
+        echo "======================================"
+        echo "CREATING FINAL PACKAGE"
+        echo "======================================"
 
-        rm -f super.img
+        echo "Checking super.img..."
+        ls -lh super.img
 
-        7z a "${{ github.event.inputs.NAME }}" super.tar
+        if [ ! -s super.img ]; then
+          echo "ERROR: super.img is missing or empty."
+          exit 1
+        fi
 
-        rm -f super.tar
+        echo ""
+        echo "Creating 7z archive..."
+        echo "Using store mode (-mx=0)."
+        echo "This avoids wasting time recompressing the Android sparse image."
+        echo ""
 
-        echo "Final package:"
+        7z a -mx=0 -bsp1 \
+          "${{ github.event.inputs.NAME }}" \
+          super.img
+
+        echo ""
+        echo "======================================"
+        echo "PACKAGE CREATED"
+        echo "======================================"
+
         ls -lh "${{ github.event.inputs.NAME }}"
 
-    - name: Upload to Release
+        echo ""
+        echo "Package contents:"
+        7z l "${{ github.event.inputs.NAME }}"
+
+    - name: Upload to GitHub Release
       uses: softprops/action-gh-release@v2
       with:
         files: lpbinary/binary/${{ github.event.inputs.NAME }}
@@ -297,10 +380,14 @@ jobs:
         body: |
           Device: ${{ github.event.inputs.DEVICE }}
           Version: ${{ github.event.inputs.VERSION }}
-          Rom Name: ${{ github.event.inputs.NAME }}
-          Physical Super Size: ${{ github.event.inputs.SUPER }}
+          ROM: ${{ github.event.inputs.NAME }}
+
+          Physical Super Size:
+          ${{ github.event.inputs.SUPER }} bytes
+
+          The package contains the generated sparse super.img.
 
           Flash:
-          Extract the 7z file and flash through ODIN in AP Section.
+          Extract the 7z archive and use the resulting super.img with the appropriate Odin/AP packaging method for the device.
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
