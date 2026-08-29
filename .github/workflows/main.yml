@@ -10,6 +10,7 @@ on:
 
   workflow_dispatch:
     inputs:
+
       DEVICE:
         description: 'Enter Your Device Name'
         required: true
@@ -18,12 +19,12 @@ on:
       GSI:
         description: 'GSI Image Direct Link'
         required: true
-        default: 'https://downloads.sourceforge.net/project/misterztr-gsi/LineageOS/Android%2015/LineageOS-22.2-20260105-GAPPS-EXT4-GSI.7z'
+        default: 'https://downloads.sourceforge.net/project/misterztr-gsi/LineageOS/Android%2015/LineageOS-22.2-20260105-GAPPS-EXT4-GSI.7z?ts=gAAAAABqk2HqpwVZ79IOVwl9dgWkjbVoaYAY9vLQsZit9oatQfsc4dyWmjlXWX0hdSQrTymZSyUKgo4GrgVtzrr8ZsVQ6tC66w%3D%3D&r=https%3A%2F%2Fsourceforge.net%2Fprojects%2Fmisterztr-gsi%2Ffiles%2FLineageOS%2FAndroid%252015%2FLineageOS-22.2-20260105-GAPPS-EXT4-GSI.7z%2Fdownload%3Fuse_mirror%3Dsf-eu-introserv-3'
 
       NAME:
         description: 'Rom Name'
         required: true
-        default: 'LineageOS-22.2-A145R-GSI.7z'
+        default: 'LineageOS-22.2-20260105-GAPPS-EXT4-GSI.7z'
 
       VERSION:
         description: 'Baseband Version'
@@ -31,7 +32,7 @@ on:
         default: 'A145RXXSEDZE4'
 
       VENDOR:
-        description: 'Enter Direct Link Of Your Vendor.img'
+        description: 'Enter Direct Link Of Your vendor.img'
         required: true
         default: 'https://github.com/movixdestiny/Universal-Super-Patcher-Samsung-/releases/download/a14/vendor.img'
 
@@ -40,6 +41,31 @@ on:
         required: true
         default: 'https://github.com/movixdestiny/Universal-Super-Patcher-Samsung-/releases/download/a14/odm.img'
 
+      PRODUCT:
+        description: 'Enter Direct Link Of Your product.img'
+        required: true
+        default: 'https://github.com/movixdestiny/Universal-Super-Patcher-Samsung-/releases/download/a14/product.img'
+
+      SYSTEM_EXT:
+        description: 'Enter Direct Link Of Your system_ext.img'
+        required: true
+        default: 'https://github.com/movixdestiny/Universal-Super-Patcher-Samsung-/releases/download/a14/system_ext.img'
+
+      ODM_DLKM:
+        description: 'Enter Direct Link Of Your odm_dlkm.img'
+        required: true
+        default: 'https://github.com/movixdestiny/Universal-Super-Patcher-Samsung-/releases/download/a14/odm_dlkm.img'
+
+      SYSTEM_DLKM:
+        description: 'Enter Direct Link Of Your system_dlkm.img'
+        required: true
+        default: 'https://github.com/movixdestiny/Universal-Super-Patcher-Samsung-/releases/download/a14/system_dlkm.img'
+
+      VENDOR_DLKM:
+        description: 'Enter Direct Link Of Your vendor_dlkm.img'
+        required: true
+        default: 'https://github.com/movixdestiny/Universal-Super-Patcher-Samsung-/releases/download/a14/vendor_dlkm.img'
+
       SUPER:
         description: 'Enter The Size Of Your Super Partition'
         required: true
@@ -47,7 +73,9 @@ on:
 
 
 jobs:
+
   Build:
+
     runs-on: ubuntu-latest
 
     steps:
@@ -66,43 +94,38 @@ jobs:
         cd lpbinary
         bash install.sh
 
-    - name: Downloading Your Vendor And Odm(if applicable)
+    - name: Downloading Stock Partitions
       run: |
         cd lpbinary/binary
 
         wget -q "${{ github.event.inputs.VENDOR }}" -O vendor.img
         wget -q "${{ github.event.inputs.ODM }}" -O odm.img
+        wget -q "${{ github.event.inputs.PRODUCT }}" -O product.img
+        wget -q "${{ github.event.inputs.SYSTEM_EXT }}" -O system_ext.img
+        wget -q "${{ github.event.inputs.ODM_DLKM }}" -O odm_dlkm.img
+        wget -q "${{ github.event.inputs.SYSTEM_DLKM }}" -O system_dlkm.img
+        wget -q "${{ github.event.inputs.VENDOR_DLKM }}" -O vendor_dlkm.img
 
-        wget -q "https://github.com/movixdestiny/Universal-Super-Patcher-Samsung-/releases/download/a14/product.img" -O product.img
+        echo "Downloaded stock partitions:"
+        ls -lh \
+          vendor.img \
+          odm.img \
+          product.img \
+          system_ext.img \
+          odm_dlkm.img \
+          system_dlkm.img \
+          vendor_dlkm.img
 
-        wget -q "https://github.com/movixdestiny/Universal-Super-Patcher-Samsung-/releases/download/a14/system_ext.img" -O system_ext.img
-
-        echo "Checking downloaded files..."
-        ls -lh vendor.img
-        ls -lh odm.img
-        ls -lh product.img
-        ls -lh system_ext.img
-
-        echo "Checking file types..."
-        file vendor.img
-        file odm.img
-        file product.img
-        file system_ext.img
-
-    - name: Downloading Your GSI And Extracting
+    - name: Downloading GSI And Extracting
       run: |
         cd lpbinary/binary
 
         wget -q "${{ github.event.inputs.GSI }}" -O gsi.7z
 
-        echo "GSI archive:"
-        ls -lh gsi.7z
-
         mkdir -p sys
 
         7z x gsi.7z -osys
 
-        echo "Searching for GSI image..."
         find sys -type f -name "*.img" -print
 
         GSI_IMAGE=$(find sys -type f -name "*.img" | head -n 1)
@@ -117,7 +140,6 @@ jobs:
         echo "GSI extracted successfully:"
         ls -lh system.img
 
-        echo "GSI image type:"
         file system.img
 
     - name: Packing
@@ -133,16 +155,21 @@ jobs:
         PRODUCT_SIZE=$(stat -c%s product.img)
         ODM_SIZE=$(stat -c%s odm.img)
         SYSTEM_EXT_SIZE=$(stat -c%s system_ext.img)
-
-        echo "system:     $SYSTEM_SIZE"
-        echo "vendor:     $VENDOR_SIZE"
-        echo "product:    $PRODUCT_SIZE"
-        echo "odm:        $ODM_SIZE"
-        echo "system_ext: $SYSTEM_EXT_SIZE"
+        ODM_DLKM_SIZE=$(stat -c%s odm_dlkm.img)
+        SYSTEM_DLKM_SIZE=$(stat -c%s system_dlkm.img)
+        VENDOR_DLKM_SIZE=$(stat -c%s vendor_dlkm.img)
 
         SUPER_SIZE=${{ github.event.inputs.SUPER }}
 
-        echo "Physical super size: $SUPER_SIZE"
+        echo "system:      $SYSTEM_SIZE"
+        echo "vendor:      $VENDOR_SIZE"
+        echo "product:     $PRODUCT_SIZE"
+        echo "odm:         $ODM_SIZE"
+        echo "system_ext:  $SYSTEM_EXT_SIZE"
+        echo "odm_dlkm:    $ODM_DLKM_SIZE"
+        echo "system_dlkm: $SYSTEM_DLKM_SIZE"
+        echo "vendor_dlkm: $VENDOR_DLKM_SIZE"
+        echo "super:       $SUPER_SIZE"
 
         echo "======================================"
         echo "Aligning partition sizes"
@@ -160,30 +187,31 @@ jobs:
         PRODUCT_ALIGNED=$(align_up "$PRODUCT_SIZE")
         ODM_ALIGNED=$(align_up "$ODM_SIZE")
         SYSTEM_EXT_ALIGNED=$(align_up "$SYSTEM_EXT_SIZE")
+        ODM_DLKM_ALIGNED=$(align_up "$ODM_DLKM_SIZE")
+        SYSTEM_DLKM_ALIGNED=$(align_up "$SYSTEM_DLKM_SIZE")
+        VENDOR_DLKM_ALIGNED=$(align_up "$VENDOR_DLKM_SIZE")
 
-        echo "system aligned:     $SYSTEM_ALIGNED"
-        echo "vendor aligned:     $VENDOR_ALIGNED"
-        echo "product aligned:    $PRODUCT_ALIGNED"
-        echo "odm aligned:        $ODM_ALIGNED"
-        echo "system_ext aligned: $SYSTEM_EXT_ALIGNED"
+        echo "system aligned:      $SYSTEM_ALIGNED"
+        echo "vendor aligned:      $VENDOR_ALIGNED"
+        echo "product aligned:     $PRODUCT_ALIGNED"
+        echo "odm aligned:         $ODM_ALIGNED"
+        echo "system_ext aligned:  $SYSTEM_EXT_ALIGNED"
+        echo "odm_dlkm aligned:    $ODM_DLKM_ALIGNED"
+        echo "system_dlkm aligned: $SYSTEM_DLKM_ALIGNED"
+        echo "vendor_dlkm aligned: $VENDOR_DLKM_ALIGNED"
 
-        MAIN_SIZE=$(
-          (
-            SYSTEM_ALIGNED +
-            VENDOR_ALIGNED +
-            PRODUCT_ALIGNED +
-            ODM_ALIGNED +
-            SYSTEM_EXT_ALIGNED +
-            8388608
-          )
-        )
+        echo "======================================"
+        echo "Calculating main group"
+        echo "======================================"
 
-        echo "Calculated main group size: $MAIN_SIZE"
+        MAIN_SIZE=$((SYSTEM_ALIGNED + VENDOR_ALIGNED + PRODUCT_ALIGNED + ODM_ALIGNED + SYSTEM_EXT_ALIGNED + ODM_DLKM_ALIGNED + SYSTEM_DLKM_ALIGNED + VENDOR_DLKM_ALIGNED + 8388608))
+
+        echo "main group size: $MAIN_SIZE"
 
         if [ "$MAIN_SIZE" -ge "$SUPER_SIZE" ]; then
-          echo "ERROR: Calculated main group is larger than physical super."
-          echo "main:  $MAIN_SIZE"
-          echo "super: $SUPER_SIZE"
+          echo "ERROR: Partitions do not fit inside physical super."
+          echo "Main group: $MAIN_SIZE"
+          echo "Super size: $SUPER_SIZE"
           exit 1
         fi
 
@@ -207,39 +235,43 @@ jobs:
           --image "odm=odm.img" \
           --partition "system_ext:readonly:${SYSTEM_EXT_ALIGNED}:main" \
           --image "system_ext=system_ext.img" \
+          --partition "odm_dlkm:readonly:${ODM_DLKM_ALIGNED}:main" \
+          --image "odm_dlkm=odm_dlkm.img" \
+          --partition "system_dlkm:readonly:${SYSTEM_DLKM_ALIGNED}:main" \
+          --image "system_dlkm=system_dlkm.img" \
+          --partition "vendor_dlkm:readonly:${VENDOR_DLKM_ALIGNED}:main" \
+          --image "vendor_dlkm=vendor_dlkm.img" \
           --sparse \
           --output super.img
 
         echo "======================================"
-        echo "super.img successfully created"
+        echo "super.img created successfully"
         echo "======================================"
 
         ls -lh super.img
-
         file super.img
 
     - name: Verify Super Image
       run: |
         cd lpbinary/binary
 
-        echo "Checking generated super.img..."
-
         if [ ! -f super.img ]; then
           echo "ERROR: super.img was not created."
           exit 1
         fi
 
-        SIZE=$(stat -c%s super.img)
+        GENERATED_SIZE=$(stat -c%s super.img)
+        SUPER_SIZE=${{ github.event.inputs.SUPER }}
 
-        echo "Generated super.img size:"
-        echo "$SIZE bytes"
+        echo "Generated super.img: $GENERATED_SIZE bytes"
+        echo "Physical super:      $SUPER_SIZE bytes"
 
-        if [ "$SIZE" -gt "${{ github.event.inputs.SUPER }}" ]; then
-          echo "ERROR: Generated super.img is larger than physical super partition."
+        if [ "$GENERATED_SIZE" -gt "$SUPER_SIZE" ]; then
+          echo "ERROR: super.img is larger than physical super."
           exit 1
         fi
 
-        echo "Super image is within physical partition size."
+        echo "Super image size check passed."
 
     - name: Creating tar and compressing to 7z
       run: |
@@ -247,11 +279,11 @@ jobs:
 
         tar -cvf super.tar super.img
 
-        rm -rf super.img
+        rm -f super.img
 
         7z a "${{ github.event.inputs.NAME }}" super.tar
 
-        rm -rf super.tar
+        rm -f super.tar
 
         echo "Final package:"
         ls -lh "${{ github.event.inputs.NAME }}"
@@ -260,15 +292,13 @@ jobs:
       uses: softprops/action-gh-release@v2
       with:
         files: lpbinary/binary/${{ github.event.inputs.NAME }}
-        name: ${{ github.event.inputs.NAME }}-${{ github.run_id }}
-        tag_name: ${{ github.run_id }}
+        name: "${{ github.event.inputs.NAME }}-${{ github.run_id }}"
+        tag_name: "${{ github.run_id }}"
         body: |
           Device: ${{ github.event.inputs.DEVICE }}
           Version: ${{ github.event.inputs.VERSION }}
           Rom Name: ${{ github.event.inputs.NAME }}
-
-          Physical Super Size:
-          ${{ github.event.inputs.SUPER }}
+          Physical Super Size: ${{ github.event.inputs.SUPER }}
 
           Flash:
           Extract the 7z file and flash through ODIN in AP Section.
