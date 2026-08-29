@@ -61,8 +61,8 @@ jobs:
         wget ${{ github.event.inputs.ODM }}
         if [ -f *.zip ]; then  unzip *.zip; fi
         if [ -f *.xz ]; then  unxz *.xz; fi
-        wget  -q https://sourceforge.net/projects/a03-files/files/product.img
-        wget  -q https://sourceforge.net/projects/a03-files/files/system_ext.img
+        wget -q https://sourceforge.net/projects/a03-files/files/product.img/download -O product.img
+        wget -q https://sourceforge.net/projects/a03-files/files/system_ext.img/download -O system_ext.img
     - name: Downloading Your GSI And Extracting
       run: |
         cd lpbinary/binary
