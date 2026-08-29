@@ -14,11 +14,11 @@ on:
         GSI:
               description: ' GSI Image Direct Link '
               required: true
-              default: 'PASTE_YOUR_GSI_URL_HERE'
+              default: 'https://downloads.sourceforge.net/project/misterztr-gsi/LineageOS/Android%2015/LineageOS-22.2-20260105-GAPPS-EXT4-GSI.7z'
         NAME:
               description: ' Rom Name'
               required: true
-              default: 'A145R-Android15-GSI.7z'
+              default: 'LineageOS-22.2-A145R-GSI.7z'
         VERSION:
               description: ' Baseband Version'
               required: true
@@ -49,46 +49,119 @@ jobs:
       run: |
         sudo apt update
         sudo apt install -y zip xz-utils unzip p7zip-full
+
     - name: Installing Tools
       run: |
         git clone https://github.com/Exynos-nigg/lpunpack-lpmake-mirror.git lpbinary
         cd lpbinary
         bash install.sh
+
     - name: Downloading Your Vendor And Odm(if applicable)
       run: |
         cd lpbinary/binary
-        wget ${{ github.event.inputs.VENDOR }}
-        wget ${{ github.event.inputs.ODM }}
-        if [ -f *.zip ]; then  unzip *.zip; fi
-        if [ -f *.xz ]; then  unxz *.xz; fi
+        wget "${{ github.event.inputs.VENDOR }}" -O vendor.img
+        wget "${{ github.event.inputs.ODM }}" -O odm.img
+
+        if [ -f *.zip ]; then unzip *.zip; fi
+        if [ -f *.xz ]; then unxz *.xz; fi
+
         wget -q 'https://store-eu-par-1.gofile.io/download/web/f59568cb-7050-4c33-a0a4-402dc12737e3/product.img' -O product.img
         wget -q 'https://store-eu-par-1.gofile.io/download/web/db6abd7c-3b9d-4575-a540-445e6f020414/system_ext.img' -O system_ext.img
+
     - name: Downloading Your GSI And Extracting
       run: |
         cd lpbinary/binary
-        wget -q ${{ github.event.inputs.GSI }}
-        mkdir sys
-        mv *.xz sys
-        cd sys
-        unxz *.xz
-        mv *.img ../system.img
-        cd ..
+
+        wget -q "${{ github.event.inputs.GSI }}" -O gsi.7z
+
+        mkdir -p sys
+
+        7z x gsi.7z -osys
+
+        find sys -type f -name "*.img" -print
+
+        GSI_IMAGE=$(find sys -type f -name "*.img" | head -n 1)
+
+        if [ -z "$GSI_IMAGE" ]; then
+          echo "ERROR: No .img file was found inside the GSI archive."
+          exit 1
+        fi
+
+        mv "$GSI_IMAGE" system.img
+
+        echo "GSI extracted successfully:"
+        ls -lh system.img
+
     - name: Packing
       run: |
         cd lpbinary/binary
-        if [ -f odm.img ]; then  main=$(($(ls -nl odm.img | awk '{print $5}') + 2621440 +$(ls -nl system.img | awk '{print $5}') + $(ls -nl vendor.img | awk '{print $5}'))); fi
-        if [ -f system_ext.img ]; then  main=$((2621440 + 2621440 +$(ls -nl system.img | awk '{print $5}') + $(ls -nl vendor.img | awk '{print $5}'))); fi
+
+        if [ -f odm.img ]; then
+          main=$(($(ls -nl odm.img | awk '{print $5}') + 2621440 +$(ls -nl system.img | awk '{print $5}') + $(ls -nl vendor.img | awk '{print $5}')))
+        fi
+
+        if [ -f system_ext.img ]; then
+          main=$((2621440 + 2621440 +$(ls -nl system.img | awk '{print $5}') + $(ls -nl vendor.img | awk '{print $5}')))
+        fi
+
         echo $main > main.txt
-        if [ -f system_ext.img ]; then  ./lpmake --metadata-size 65536 --super-name super --metadata-slots 2 --device super:${{ github.event.inputs.SUPER }} --group main:$(<main.txt) --partition system:readonly:$(ls -nl system.img | awk '{print $5}'):main --image system=system.img --partition vendor:readonly:$(ls -nl vendor.img | awk '{print $5}'):main --image vendor=vendor.img --partition product:readonly:$(ls -nl product.img | awk '{print $5}'):main --image product=product.img --partition system_ext:readonly:$(ls -nl system_ext.img | awk '{print $5}'):main --image system_ext=system_ext.img --sparse --output super.img; fi
-        if [ -f odm.img ]; then  ./lpmake --metadata-size 65536 --super-name super --metadata-slots 2 --device super:${{ github.event.inputs.SUPER }} --group main:$(<main.txt) --partition system:readonly:$(ls -nl system.img | awk '{print $5}'):main --image system=system.img --partition vendor:readonly:$(ls -nl vendor.img | awk '{print $5}'):main --image vendor=vendor.img --partition product:readonly:$(ls -nl product.img | awk '{print $5}'):main --image product=product.img --partition odm:readonly:$(ls -nl odm.img | awk '{print $5}'):main --image odm=odm.img --sparse --output super.img; fi
-        rm system.img && rm product.img && rm vendor.img && rm -f odm.img && rm -f system_ext.img
+
+        if [ -f system_ext.img ]; then
+          ./lpmake \
+          --metadata-size 65536 \
+          --super-name super \
+          --metadata-slots 2 \
+          --device super:${{ github.event.inputs.SUPER }} \
+          --group main:$(<main.txt) \
+          --partition system:readonly:$(ls -nl system.img | awk '{print $5}'):main \
+          --image system=system.img \
+          --partition vendor:readonly:$(ls -nl vendor.img | awk '{print $5}'):main \
+          --image vendor=vendor.img \
+          --partition product:readonly:$(ls -nl product.img | awk '{print $5}'):main \
+          --image product=product.img \
+          --partition system_ext:readonly:$(ls -nl system_ext.img | awk '{print $5}'):main \
+          --image system_ext=system_ext.img \
+          --sparse \
+          --output super.img
+        fi
+
+        if [ -f odm.img ]; then
+          ./lpmake \
+          --metadata-size 65536 \
+          --super-name super \
+          --metadata-slots 2 \
+          --device super:${{ github.event.inputs.SUPER }} \
+          --group main:$(<main.txt) \
+          --partition system:readonly:$(ls -nl system.img | awk '{print $5}'):main \
+          --image system=system.img \
+          --partition vendor:readonly:$(ls -nl vendor.img | awk '{print $5}'):main \
+          --image vendor=vendor.img \
+          --partition product:readonly:$(ls -nl product.img | awk '{print $5}'):main \
+          --image product=product.img \
+          --partition odm:readonly:$(ls -nl odm.img | awk '{print $5}'):main \
+          --image odm=odm.img \
+          --sparse \
+          --output super.img
+        fi
+
+        rm system.img
+        rm product.img
+        rm vendor.img
+        rm -f odm.img
+        rm -f system_ext.img
+
     - name: Creating tar and compressing to 7z
       run: |
         cd lpbinary/binary
+
         tar -cvf super.tar super.img
+
         rm -rf super.img
+
         7z a ${{ github.event.inputs.NAME }} super.tar
+
         rm -rf super.tar
+
     - name: Upload to Release
       uses: softprops/action-gh-release@v1
       with:
