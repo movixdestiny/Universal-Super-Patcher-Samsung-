@@ -99,7 +99,7 @@ jobs:
         cd lpbinary/binary
 
         echo "======================================"
-        echo "Downloading stock partitions"
+        echo "DOWNLOADING STOCK PARTITIONS"
         echo "======================================"
 
         wget -q --show-progress \
@@ -131,7 +131,7 @@ jobs:
           -O vendor_dlkm.img
 
         echo ""
-        echo "Downloaded stock partitions:"
+        echo "Downloaded partitions:"
         ls -lh \
           vendor.img \
           odm.img \
@@ -146,7 +146,7 @@ jobs:
         cd lpbinary/binary
 
         echo "======================================"
-        echo "Downloading LineageOS GSI"
+        echo "DOWNLOADING GSI"
         echo "======================================"
 
         wget -q --show-progress \
@@ -158,7 +158,7 @@ jobs:
         ls -lh gsi.7z
 
         echo "======================================"
-        echo "Extracting GSI archive"
+        echo "EXTRACTING GSI"
         echo "======================================"
 
         mkdir -p sys
@@ -166,7 +166,7 @@ jobs:
         7z x gsi.7z -osys
 
         echo ""
-        echo "Searching for system image..."
+        echo "Searching for .img file..."
 
         find sys -type f -name "*.img" -print
 
@@ -190,7 +190,7 @@ jobs:
         cd lpbinary/binary
 
         echo "======================================"
-        echo "Calculating partition sizes"
+        echo "CALCULATING PARTITION SIZES"
         echo "======================================"
 
         SYSTEM_SIZE=$(stat -c%s system.img)
@@ -215,7 +215,7 @@ jobs:
         echo "super:       $SUPER_SIZE"
 
         echo "======================================"
-        echo "Aligning partition sizes"
+        echo "ALIGNING PARTITIONS"
         echo "======================================"
 
         ALIGN=1048576
@@ -244,7 +244,7 @@ jobs:
         echo "vendor_dlkm aligned: $VENDOR_DLKM_ALIGNED"
 
         echo "======================================"
-        echo "Calculating main group"
+        echo "CALCULATING MAIN GROUP"
         echo "======================================"
 
         MAIN_SIZE=$(( \
@@ -271,7 +271,7 @@ jobs:
         fi
 
         echo "======================================"
-        echo "Building custom sparse super.img"
+        echo "BUILDING SPARSE SUPER.IMG"
         echo "======================================"
 
         ./lpmake \
@@ -301,7 +301,7 @@ jobs:
 
         echo ""
         echo "======================================"
-        echo "super.img created successfully"
+        echo "SUPER.IMG CREATED"
         echo "======================================"
 
         ls -lh super.img
@@ -312,7 +312,7 @@ jobs:
         cd lpbinary/binary
 
         echo "======================================"
-        echo "Verifying super.img"
+        echo "VERIFYING SUPER.IMG"
         echo "======================================"
 
         if [ ! -f super.img ]; then
@@ -339,42 +339,73 @@ jobs:
         cd lpbinary/binary
 
         echo "======================================"
-        echo "CREATING FINAL PACKAGE"
+        echo "CREATING FINAL ARCHIVE"
         echo "======================================"
-
-        echo "Checking super.img..."
-        ls -lh super.img
 
         if [ ! -s super.img ]; then
           echo "ERROR: super.img is missing or empty."
           exit 1
         fi
 
+        echo "super.img:"
+        ls -lh super.img
+
         echo ""
-        echo "Creating 7z archive..."
-        echo "Using store mode (-mx=0)."
-        echo "This avoids wasting time recompressing the Android sparse image."
-        echo ""
+        echo "Creating archive..."
+        echo "Using fast store mode (-mx=0)."
+        echo "No unnecessary recompression."
 
         7z a -mx=0 -bsp1 \
           "${{ github.event.inputs.NAME }}" \
           super.img
 
         echo ""
-        echo "======================================"
-        echo "PACKAGE CREATED"
-        echo "======================================"
-
+        echo "Archive created:"
         ls -lh "${{ github.event.inputs.NAME }}"
 
         echo ""
-        echo "Package contents:"
-        7z l "${{ github.event.inputs.NAME }}"
+        echo "======================================"
+        echo "SPLITTING ARCHIVE FOR GITHUB"
+        echo "======================================"
+
+        echo "GitHub Releases limit individual assets to less than 2 GiB."
+        echo "Splitting into approximately 1.8 GiB parts..."
+
+        split -b 1800M \
+          -d \
+          -a 3 \
+          "${{ github.event.inputs.NAME }}" \
+          "${{ github.event.inputs.NAME }}.part."
+
+        echo ""
+        echo "Release parts:"
+
+        ls -lh "${{ github.event.inputs.NAME }}.part."*
+
+        echo ""
+        echo "======================================"
+        echo "VERIFYING SPLIT FILES"
+        echo "======================================"
+
+        for FILE in "${{ github.event.inputs.NAME }}.part."*; do
+          SIZE=$(stat -c%s "$FILE")
+
+          if [ "$SIZE" -ge 2147483648 ]; then
+            echo "ERROR: $FILE is too large."
+            exit 1
+          fi
+
+          echo "$(basename "$FILE"): $SIZE bytes"
+        done
+
+        echo ""
+        echo "All release parts are below the GitHub asset limit."
 
     - name: Upload to GitHub Release
       uses: softprops/action-gh-release@v2
       with:
-        files: lpbinary/binary/${{ github.event.inputs.NAME }}
+        files: |
+          lpbinary/binary/${{ github.event.inputs.NAME }}.part.*
         name: "${{ github.event.inputs.NAME }}-${{ github.run_id }}"
         tag_name: "${{ github.run_id }}"
         body: |
@@ -385,9 +416,30 @@ jobs:
           Physical Super Size:
           ${{ github.event.inputs.SUPER }} bytes
 
-          The package contains the generated sparse super.img.
+          The generated super.img contains:
 
-          Flash:
-          Extract the 7z archive and use the resulting super.img with the appropriate Odin/AP packaging method for the device.
+          - LineageOS GSI as system
+          - Stock vendor
+          - Stock product
+          - Stock odm
+          - Stock system_ext
+          - Stock odm_dlkm
+          - Stock system_dlkm
+          - Stock vendor_dlkm
+
+          The 7z archive was split into multiple parts because GitHub Releases has a per-file size limit.
+
+          To reconstruct the archive on Windows:
+
+          1. Download ALL .part.000, .part.001, .part.002 files, etc.
+          2. Put them in the same folder.
+          3. Run:
+             copy /b "LineageOS-22.2-20260105-GAPPS-EXT4-GSI.7z.part.000"+"LineageOS-22.2-20260105-GAPPS-EXT4-GSI.7z.part.001"+"LineageOS-22.2-20260105-GAPPS-EXT4-GSI.7z.part.002"+"LineageOS-22.2-20260105-GAPPS-EXT4-GSI.7z.part.003" "LineageOS-22.2-20260105-GAPPS-EXT4-GSI.7z"
+
+          4. Open the reconstructed .7z with 7-Zip.
+          5. Extract super.img.
+
+          IMPORTANT:
+          The resulting super.img is the complete generated logical super partition image. Do not flash the individual .part files.
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
